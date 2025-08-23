@@ -1,5 +1,9 @@
 {
+  "scripts": {
+    "start": "dotenvx run -- node cardsofvalue.js greater 99",
+    "run": "dotenvx run -- node cardsofvalue.js"
+  },
   "dependencies": {
-    "dotenv": "^17.0.1"
+    "@dotenvx/dotenvx": "^1.49.0"
   }
 }

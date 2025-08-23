@@ -7,7 +7,7 @@ This repository provides utility scripts for interacting with the [CardTrader](h
 - **Inventory Filtering:**  
   Filter your listed cards by price using comparison operators: `greater`, `less`, or `equal`.
 - **Secure Credentials:**  
-  Uses a `.env` file to store your API token securely.
+  Uses a `.env` file and dotenvx to load your API token securely.
 - **Command Line Interface:**  
   Pass comparison type and price (in cents) as arguments for flexible queries.
 
@@ -19,29 +19,32 @@ This repository provides utility scripts for interacting with the [CardTrader](h
 ## Setup
 
 1. **Clone the repository:**
+
 ```
 git clone https://github.com/yourusername/cardtrader-utils.git
 cd cardtrader-utils
 ```
 
 2. **Create a `.env` file** in the project root:
+
 ```
 API_TOKEN=your_cardtrader_api_token_here
 ```
 
 3. **.gitignore**  
-The `.env` file is already included in `.gitignore` to protect your credentials.
+   The `.env` file is already included in `.gitignore` to protect your credentials.
 
 ## Usage
 
-Run the script with:
+Run the script with dotenvx:
 
-`node script.js [greater|less|equal] [price_in_cents]`
+`npx dotenvx run -- node cardsofvalue.js [greater|less|equal] [price_in_cents]`
 
 **Examples:**
-- `node script.js equal 8` — Find cards listed at exactly 8 cents
-- `node script.js greater 10` — Find cards listed for more than 10 cents
-- `node script.js less 5` — Find cards listed for less than 5 cents
+
+- `npx dotenvx run -- node cardsofvalue.js equal 8` — Find cards listed at exactly 8 cents
+- `npx dotenvx run -- node cardsofvalue.js greater 10` — Find cards listed for more than 10 cents
+- `npx dotenvx run -- node cardsofvalue.js less 5` — Find cards listed for less than 5 cents
 
 The script will output the total number of cards matching your criteria.
 
