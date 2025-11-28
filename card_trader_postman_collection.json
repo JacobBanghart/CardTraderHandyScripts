@@ -1,0 +1,873 @@
+{
+	"info": {
+		"_postman_id": "a1b5f927-48a4-4ea4-83f9-ec232ba98283",
+		"name": "CardTrader API v2",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Apps Info",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/info",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"info"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "List of games",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/games",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"games"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "List of categories",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/categories",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"categories"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "List of expansions",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/expansions",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"expansions"
+					],
+					"query": [
+						{
+							"key": "page",
+							"value": "1",
+							"disabled": true
+						},
+						{
+							"key": "limit",
+							"value": "4000000",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "List of blueprints",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/blueprints/export?expansion_id=979",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"blueprints",
+						"export"
+					],
+					"query": [
+						{
+							"key": "expansion_id",
+							"value": "979"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Marketplace products",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/marketplace/products?expansion_id=34",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"marketplace",
+						"products"
+					],
+					"query": [
+						{
+							"key": "expansion_id",
+							"value": "34"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Marketplace products by blueprint id",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/marketplace/products?blueprint_id=6854",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"marketplace",
+						"products"
+					],
+					"query": [
+						{
+							"key": "blueprint_id",
+							"value": "6854"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get cart",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/cart",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"cart"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add product",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"product_id\": 110419919,\n    \"quantity\": 1,\n    \"via_cardtrader_zero\": true\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/cart/add",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"cart",
+						"add"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Remove product",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"product_id\": 2627687,\n    \"quantity\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/cart/remove",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"cart",
+						"remove"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Purchase",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/cart/purchase",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"cart",
+						"purchase"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Shipping Methods list",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+				"raw": "https://{{host}}/api/v2/shipping_methods?username=ct%20connect",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"shipping_methods"
+					],
+					"query": [
+						{
+							"key": "username",
+							"value": "ct%20connect"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Export Products",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/products/export",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products",
+						"export"
+					],
+					"query": [
+						{
+							"key": "page",
+							"value": "1",
+							"disabled": true
+						},
+						{
+							"key": "limit",
+							"value": "4000000",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Put product on sale",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"price\": 0.04,\n\t\"quantity\": 1,\n\t\"blueprint_id\": 121,\n    \"error_mode\": \"strict\",\n    \"properties\": {\n        \"condition\": \"Near Mint\"\t\n    }\n}"
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/products",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update product",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"price\": 1.7,\n\t\"quantity\": 1\n\n    \n}"
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/products/144160",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products",
+						"144160"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete product",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/products/144160",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products",
+						"144160"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Increment Product Quantity",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"delta_quantity\": 2\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/products/144161/increment",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products",
+						"144161",
+						"increment"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Bulk create",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"products\": [\n\t\t{\n\t\t\t\"price\": 1.5,\n\t\t\t\"quantity\": 4,\n\t\t\t\"blueprint_id\": 13,\n            \"user_data_field\": \"shelf09\"\n\t\t},\n\t\t{\n\t\t\t\"price\": 2,\n\t\t\t\"quantity\": 1\n\t\t},\n\t\t{\n\t\t\t\"price\": 3,\n\t\t\t\"quantity\": \"2\",\n\t\t\t\"blueprint_id\": 13,\n\t\t\t\"properties\": {\n\t\t\t\t\"mtg_foil\": false\n\t\t\t}\n\t\t}\n\t]\n}\n\n"
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/products/bulk_create",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products",
+						"bulk_create"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Bulk update",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"products\": [\n\t\t{\n\t\t\t\"id\": 101944614,\n\t\t\t\"price\": 1.5,\n\t\t\t\"quantity\": 4\n\t\t}\n\t]\n}\n\n"
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/products/bulk_update",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products",
+						"bulk_update"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Bulk destroy",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"type": "text",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"products\": [\n\t\t{\n\t\t\t\"id\": 2207603\n\t\t}\n\t]\n}\n\n"
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/products/bulk_destroy",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"products",
+						"bulk_destroy"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get job status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/jobs/95a4d81c-e8c4-40ea-bc7d-ac4d41d2e634",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"jobs",
+						"95a4d81c-e8c4-40ea-bc7d-ac4d41d2e634"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Upload Csv",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "game_id",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "csv",
+							"type": "file",
+							"src": "/C:/Users/tomma/Downloads/Telegram Desktop/2018.csv"
+						},
+						{
+							"key": "column_names",
+							"value": "expansion_code|_|name|quantity|language|condition|_|price_cents",
+							"type": "text"
+						},
+						{
+							"key": "replace_stock_or_add_to_stock",
+							"value": "add_to_stock",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/product_imports",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"product_imports"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Products CSV Status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/product_imports/2",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"product_imports",
+						"2"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Orders list",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/orders?sort=date.desc",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"orders"
+					],
+					"query": [
+						{
+							"key": "sort",
+							"value": "date.desc"
+						},
+						{
+							"key": "from",
+							"value": "2019-01-01",
+							"disabled": true
+						},
+						{
+							"key": "to",
+							"value": "2019-03-01",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Request Cancellation",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"cancel_explanation\": \"why this should be canceled?\",\r\n    \"relist_if_cancelled\": false\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/orders/733732/request-cancellation",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"orders",
+						"733732",
+						"request-cancellation"
+					],
+					"query": [
+						{
+							"key": "from",
+							"value": "2019-01-01",
+							"disabled": true
+						},
+						{
+							"key": "to",
+							"value": "2019-03-01",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "ConfirmCancellation",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"relist_if_cancelled\": false\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://{{host}}/api/v2/orders/733732/confirm-cancellation",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"orders",
+						"733732",
+						"confirm-cancellation"
+					],
+					"query": [
+						{
+							"key": "from",
+							"value": "2019-01-01",
+							"disabled": true
+						},
+						{
+							"key": "to",
+							"value": "2019-03-01",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Order details",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/orders/733708",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"orders",
+						"733708"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "CT0 Box Items",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/ct0_box_items",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"ct0_box_items"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "CT0 Box Item details",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{host}}/api/v2/ct0_box_items/1917020",
+					"protocol": "https",
+					"host": [
+						"{{host}}"
+					],
+					"path": [
+						"api",
+						"v2",
+						"ct0_box_items",
+						"1917020"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJjYXJkdHJhZGVyLXByb2R1Y3Rpb24iLCJzdWIiOiJhcHA6MTQ5MzMiLCJhdWQiOiJhcHA6MTQ5MzMiLCJleHAiOjQ5MTYwMDg5MjcsImp0aSI6ImFiYzYwMzRjLWI0Y2YtNDE4Yi1hYTdkLTVkMzI3ZGNjNjUzOSIsImlhdCI6MTc2MDMzMTcyNywibmFtZSI6IkphY29ibWJhbmdoYXJ0IEFwcCAyMDI1MDQxOTA3MDUxNSJ9.F3vlRJ4ai8v_xS-KtA33ZyswM-94u050NLiV5_w-nl4Pc0tRKWPO3ThmClWtC6SHeOiBSZFpEf-MZuq3in3CeS78mfmrX-RzAl6-2DaXgQZBiftQ75_EZdqz7fnpw4auxddzgOwAok-bgFVQTz1CdgLDoMIJ5vQO5YvYXgfDENGNVfX9EgpAtyFcB189MOJtT9MRSdAqXWTNhsXgIg7y_EIZcjsIWmdJophmp_4pwjeQUUkhSKLWM46Mg378CtE6X-XF4hSxxx8OFgfTqu0pVVIsKsHp1C0KtVKEQsXycClOZzLXHkVMTBMvHmtFulgnwDSzSgONKfgFo2UnY3krnQ",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "host",
+			"value": "api.cardtrader.com"
+		}
+	]
+}
