@@ -13,12 +13,17 @@ const TrashIcon = memo(() => (
 // Memoized row component - only re-renders when its specific props change
 interface CardRowProps {
   row: ListingRow;
+  rowIndex: number;
   onUpdate: (blueprintId: number, updates: Partial<ListingRow>) => void;
   onDelete: (blueprintId: number) => void;
 }
 
-const CardRow = memo(function CardRow({ row, onUpdate, onDelete }: CardRowProps) {
+const CardRow = memo(function CardRow({ row, rowIndex, onUpdate, onDelete }: CardRowProps) {
   const blueprintId = row.blueprint.id;
+  // Tab order: qty → foil → next row's qty → foil (interleaved)
+  // Prices are skipped (tabIndex -1) since they're set by defaults
+  const qtyTabIndex = 1000 + (rowIndex * 2);
+  const foilTabIndex = 1000 + (rowIndex * 2) + 1;
   
   return (
     <div 
@@ -62,6 +67,7 @@ const CardRow = memo(function CardRow({ row, onUpdate, onDelete }: CardRowProps)
       <div>
         <select
           className="border rounded px-2 py-1"
+          tabIndex={-1}
           value={row.condition}
           onChange={e => onUpdate(blueprintId, { condition: e.target.value })}
         >
@@ -73,6 +79,7 @@ const CardRow = memo(function CardRow({ row, onUpdate, onDelete }: CardRowProps)
       <div>
         <select
           className="border rounded px-2 py-1 w-full"
+          tabIndex={-1}
           value={row.language}
           onChange={e => onUpdate(blueprintId, { language: e.target.value })}
         >
@@ -83,6 +90,7 @@ const CardRow = memo(function CardRow({ row, onUpdate, onDelete }: CardRowProps)
         <input
           type="number"
           className="w-full border rounded px-2 py-1 text-center"
+          tabIndex={qtyTabIndex}
           value={row.quantity || ''}
           onChange={e => onUpdate(blueprintId, { quantity: parseInt(e.target.value) || 0 })}
           min={0}
@@ -92,6 +100,7 @@ const CardRow = memo(function CardRow({ row, onUpdate, onDelete }: CardRowProps)
         <input
           type="number"
           className="w-full border rounded px-2 py-1 text-center bg-yellow-50"
+          tabIndex={foilTabIndex}
           value={row.quantityFoil || ''}
           onChange={e => onUpdate(blueprintId, { quantityFoil: parseInt(e.target.value) || 0 })}
           min={0}
@@ -102,6 +111,7 @@ const CardRow = memo(function CardRow({ row, onUpdate, onDelete }: CardRowProps)
         <input
           type="text"
           className="w-full border rounded px-2 py-1"
+          tabIndex={-1}
           value={row.price}
           onChange={e => onUpdate(blueprintId, { price: e.target.value })}
           placeholder="0.00"
@@ -128,10 +138,23 @@ export default function BulkInterface() {
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   
   // Selection state for the picker (top bar)
-  const [selectedExpansionId, setSelectedExpansionId] = useState<number | null>(null);
+  // Multiple expansion support with localStorage persistence
+  const [selectedExpansionIds, setSelectedExpansionIds] = useState<number[]>(() => {
+    const saved = localStorage.getItem('selectedExpansionIds');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [selectedRarity, setSelectedRarity] = useState<string>('All rarities');
   const [expansionSearch, setExpansionSearch] = useState('');
-  const [letterFilter, setLetterFilter] = useState('');
+  const [letterFilter, setLetterFilter] = useState(() => {
+    return localStorage.getItem('letterFilter') ?? '';
+  });
   
   // Working items - the cards you're building up to sell (main table)
   const [workingItems, setWorkingItems] = useState<ListingRow[]>(() => {
@@ -181,6 +204,16 @@ export default function BulkInterface() {
     localStorage.setItem('defaultPrice', defaultPrice);
   }, [defaultPrice]);
 
+  // Persist letter filter
+  useEffect(() => {
+    localStorage.setItem('letterFilter', letterFilter);
+  }, [letterFilter]);
+
+  // Persist selected expansions
+  useEffect(() => {
+    localStorage.setItem('selectedExpansionIds', JSON.stringify(selectedExpansionIds));
+  }, [selectedExpansionIds]);
+
   // Persist working items to localStorage
   useEffect(() => {
     localStorage.setItem('workingItems', JSON.stringify(workingItems));
@@ -222,9 +255,9 @@ export default function BulkInterface() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [expansions, expansionSearch]);
 
-  // Load blueprints when expansion selected (for the picker)
+  // Load blueprints when expansions selected (for the picker)
   useEffect(() => {
-    if (!selectedExpansionId) {
+    if (selectedExpansionIds.length === 0) {
       setBlueprints([]);
       return;
     }
@@ -232,11 +265,75 @@ export default function BulkInterface() {
     setLoading(true);
     setError(null);
 
-    fetchBlueprints(selectedExpansionId)
-      .then(setBlueprints)
+    // Fetch blueprints for all selected expansions
+    Promise.all(selectedExpansionIds.map(id => fetchBlueprints(id)))
+      .then(results => {
+        // Merge all blueprints, sorted by name
+        const merged = results.flat().sort((a, b) => a.name.localeCompare(b.name));
+        setBlueprints(merged);
+      })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
-  }, [selectedExpansionId]);
+  }, [selectedExpansionIds]);
+
+  // Get display info for selected expansions
+  const selectedExpansionsInfo = useMemo(() => {
+    return selectedExpansionIds.map(id => {
+      const exp = expansions.find(e => e.id === id);
+      return exp ? { id, name: exp.name, code: exp.code } : null;
+    }).filter(Boolean) as { id: number; name: string; code: string }[];
+  }, [selectedExpansionIds, expansions]);
+
+  // Add/remove expansion from selection
+  const toggleExpansion = useCallback((expId: number) => {
+    setSelectedExpansionIds(prev => 
+      prev.includes(expId) 
+        ? prev.filter(id => id !== expId)
+        : [...prev, expId]
+    );
+  }, []);
+
+  // Helper to get next letter
+  const getNextLetter = useCallback((current: string): string => {
+    const trimmed = current.trim().toLowerCase();
+    if (!trimmed) return 'a';
+    
+    // Single letter: advance to next
+    if (trimmed.length === 1 && /[a-z]/.test(trimmed)) {
+      if (trimmed === 'z') return ''; // Done!
+      return String.fromCharCode(trimmed.charCodeAt(0) + 1);
+    }
+    
+    return ''; // Reset for complex patterns
+  }, []);
+
+  // Advance to next letter and auto-add items
+  const advanceToNextLetter = useCallback(() => {
+    const nextLetter = getNextLetter(letterFilter);
+    if (nextLetter) {
+      setLetterFilter(nextLetter);
+      // Add items for the new letter
+      if (blueprints.length > 0) {
+        const newRows: ListingRow[] = blueprints
+          .filter(bp => bp.name.charAt(0).toLowerCase() === nextLetter)
+          .map(bp => ({
+            blueprint: bp,
+            selected: false,
+            condition: defaultCondition,
+            language: defaultLanguage,
+            quantity: defaultQuantity,
+            quantityFoil: defaultQuantityFoil,
+            price: defaultPrice,
+          }));
+
+        setWorkingItems(prev => {
+          const existingIds = new Set(prev.map(r => r.blueprint.id));
+          const toAdd = newRows.filter(r => !existingIds.has(r.blueprint.id));
+          return [...prev, ...toAdd];
+        });
+      }
+    }
+  }, [getNextLetter, letterFilter, blueprints, defaultCondition, defaultLanguage, defaultQuantity, defaultQuantityFoil, defaultPrice]);
 
   // Add items from selected expansion to working items
   const handleAddItems = useCallback(() => {
@@ -420,7 +517,18 @@ export default function BulkInterface() {
         // Remove sold items from working list
         const soldIds = new Set(sellableItems.map(s => s.blueprint.id));
         setWorkingItems(prev => prev.filter(row => !soldIds.has(row.blueprint.id)));
-        alert(`Successfully listed ${products.length} items!`);
+        
+        // Auto-advance to next letter if using single letter filter
+        const nextLetter = getNextLetter(letterFilter);
+        if (nextLetter) {
+          setLetterFilter(nextLetter);
+          alert(`Successfully listed ${products.length} items! Advancing to letter "${nextLetter.toUpperCase()}"`);
+        } else if (letterFilter.trim()) {
+          alert(`Successfully listed ${products.length} items! All letters complete.`);
+          setLetterFilter('');
+        } else {
+          alert(`Successfully listed ${products.length} items!`);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create products');
@@ -432,72 +540,118 @@ export default function BulkInterface() {
   return (
     <div className="min-h-screen bg-gray-100 pb-32">
       {/* Header */}
-      <header className="bg-[#1a1a2e] text-white px-6 py-4 flex items-center gap-6">
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-bold tracking-wider">CARD</span>
-          <span className="text-yellow-400 text-xl">▲</span>
-          <span className="text-xl font-bold tracking-wider">TRADER</span>
-        </div>
-        
-        {/* Expansion selector with search */}
-        <div className="flex-1 max-w-lg relative">
-          <input
-            type="text"
-            className="w-full px-4 py-3 rounded bg-white text-gray-900 text-base"
-            placeholder="Search expansions..."
-            value={expansionSearch}
-            onChange={e => setExpansionSearch(e.target.value)}
-          />
-          {expansionSearch && filteredExpansions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 bg-white border rounded-b shadow-lg max-h-64 overflow-y-auto z-50">
-              {filteredExpansions.slice(0, 20).map(exp => (
-                <button
+      <header className="bg-[#1a1a2e] text-white px-6 py-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xl font-bold tracking-wider">CARD</span>
+            <span className="text-yellow-400 text-xl">▲</span>
+            <span className="text-xl font-bold tracking-wider">TRADER</span>
+          </div>
+          
+          {/* Expansion selector with search */}
+          <div className="flex-1 max-w-md relative">
+            <input
+              type="text"
+              className="w-full px-4 py-2.5 rounded bg-white text-gray-900 text-base"
+              placeholder="Search expansions..."
+              value={expansionSearch}
+              onChange={e => setExpansionSearch(e.target.value)}
+            />
+            {expansionSearch && filteredExpansions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 bg-white border rounded-b shadow-lg max-h-64 overflow-y-auto z-50">
+                {filteredExpansions.slice(0, 20).map(exp => (
+                  <button
+                    key={exp.id}
+                    className={`w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-900 flex items-center justify-between ${
+                      selectedExpansionIds.includes(exp.id) ? 'bg-green-50' : ''
+                    }`}
+                    onClick={() => {
+                      toggleExpansion(exp.id);
+                      setExpansionSearch('');
+                    }}
+                  >
+                    <span>{exp.name} ({exp.code})</span>
+                    {selectedExpansionIds.includes(exp.id) && (
+                      <span className="text-green-600 font-bold">✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Selected expansion chips - inline */}
+          {selectedExpansionsInfo.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {selectedExpansionsInfo.map(exp => (
+                <span 
                   key={exp.id}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-900"
-                  onClick={() => {
-                    setSelectedExpansionId(exp.id);
-                    setExpansionSearch(exp.name);
-                  }}
+                  className="inline-flex items-center bg-blue-500 text-white text-sm px-2.5 py-1 rounded font-medium"
                 >
-                  {exp.name} ({exp.code})
-                </button>
+                  {exp.code.toUpperCase()}
+                  <button
+                    className="ml-1.5 hover:text-red-200 text-lg leading-none"
+                    onClick={() => toggleExpansion(exp.id)}
+                  >
+                    ×
+                  </button>
+                </span>
               ))}
+              {selectedExpansionsInfo.length > 1 && (
+                <button
+                  className="text-sm text-gray-400 hover:text-red-400 px-1"
+                  onClick={() => setSelectedExpansionIds([])}
+                >
+                  Clear
+                </button>
+              )}
             </div>
           )}
+
+          <div className="flex items-center gap-3 ml-auto">
+            {/* Rarity filter */}
+            <select
+              className="px-3 py-2.5 rounded bg-white text-gray-900 text-base"
+              value={selectedRarity}
+              onChange={e => setSelectedRarity(e.target.value)}
+            >
+              <option>All rarities</option>
+              <option>Common</option>
+              <option>Uncommon</option>
+              <option>Rare</option>
+              <option>Mythic</option>
+            </select>
+
+            {/* Letter filter for adding items */}
+            <div className="flex items-center">
+              <input
+                type="text"
+                className="w-14 px-2 py-2.5 rounded-l bg-white text-gray-900 text-base text-center font-mono uppercase"
+                placeholder="A"
+                value={letterFilter}
+                onChange={e => setLetterFilter(e.target.value.toLowerCase())}
+                title="Filter by first letter: 'a', 'a-c', 'c-', or '-g'"
+              />
+              <button
+                className="px-2.5 py-2.5 rounded-r bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold"
+                onClick={advanceToNextLetter}
+                title="Next letter"
+              >
+                →
+              </button>
+            </div>
+
+            {/* Add items button */}
+            <button
+              className="bg-green-500 hover:bg-green-600 text-white px-5 py-2.5 rounded flex items-center gap-2 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleAddItems}
+              disabled={loading || filteredBlueprintsCount === 0}
+            >
+              <span>+</span>
+              Add{letterFilter ? ` "${letterFilter.toUpperCase()}"` : ''} ({filteredBlueprintsCount})
+            </button>
+          </div>
         </div>
-
-        {/* Rarity filter */}
-        <select
-          className="px-4 py-3 rounded bg-white text-gray-900 text-base"
-          value={selectedRarity}
-          onChange={e => setSelectedRarity(e.target.value)}
-        >
-          <option>All rarities</option>
-          <option>Common</option>
-          <option>Uncommon</option>
-          <option>Rare</option>
-          <option>Mythic</option>
-        </select>
-
-        {/* Letter filter for adding items */}
-        <input
-          type="text"
-          className="px-4 py-3 rounded bg-white text-gray-900 text-base w-24"
-          placeholder="a-c"
-          value={letterFilter}
-          onChange={e => setLetterFilter(e.target.value)}
-          title="Filter by first letter: 'a', 'a-c', 'c-', or '-g'"
-        />
-
-        {/* Add items button - adds cards from selected expansion */}
-        <button
-          className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded flex items-center gap-3 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={handleAddItems}
-          disabled={loading || filteredBlueprintsCount === 0}
-        >
-          <span>➕</span>
-          Add items {filteredBlueprintsCount > 0 && `(${filteredBlueprintsCount})`}
-        </button>
       </header>
 
       {/* Toolbar */}
@@ -615,10 +769,11 @@ export default function BulkInterface() {
 
             {/* Table rows */}
             <div className="divide-y max-h-[calc(100vh-400px)] overflow-y-auto">
-              {sortedWorkingItems.map(row => (
+              {sortedWorkingItems.map((row, index) => (
                 <CardRow
                   key={row.blueprint.id}
                   row={row}
+                  rowIndex={index}
                   onUpdate={updateRow}
                   onDelete={deleteRow}
                 />
