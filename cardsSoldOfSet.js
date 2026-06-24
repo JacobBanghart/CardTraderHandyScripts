@@ -75,11 +75,47 @@ const CACHE_TTL_MS = CACHE_TTL_HOURS * 60 * 60 * 1000;
     process.exit(1);
   }
 
-  // Fetch all orders (paginated) and collect sets with sales since fromDate
+  // Get categories to derive game names
+  let categories = null;
+  const catCachePath = path.join(CACHE_DIR, 'categories.json');
+  categories = readJsonIfFresh(catCachePath);
+  if (!Array.isArray(categories)) {
+    const catRes = await fetch(`${API_URL}/categories`, {
+      headers: {
+        'Authorization': `Bearer ${API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (catRes.ok) {
+      categories = await catRes.json();
+      if (Array.isArray(categories)) writeJson(catCachePath, categories);
+    }
+  }
+  if (!Array.isArray(categories)) {
+    console.error('Could not fetch categories list.');
+    process.exit(1);
+  }
+
+  // Build a map of game_id -> game name
+  const gameNames = new Map();
+  for (const cat of categories) {
+    if (!gameNames.has(cat.game_id)) {
+      const name = cat.name.replace(/ (Single Card|Token|Emblem|Booster|Starter|Playmat|Sleeve|Storage|Album|Bundle|Action|Sealed|Accessories|Art|Equipment|Deckbox|Playset|Oversized|Insert|Promo|Basic Land|Special|Card Back|Heroes|Display|Structure|Deck Box|Theme Deck|Prerelease|Fat Pack|Intro Pack|Gift|Challenger|Battle|Commander|Duel|Premium|Anthology|World|Secret|Archenemy|Planechase|Conspiracy|Deckmasters|Masters|From the Vault|Clash|Game Day|Event|League|Spin|Dice|Tin|Playsets|Box|Set|Pack|Kit|Case|Lot|Collection|Other|Counter|Marker|Life|Board|Mat|Binder|Portfolio|Card|Cards|Foil|Non-Foil|English|Japanese|Korean|Chinese|German|French|Spanish|Italian|Portuguese|Russian).*/i, '');
+      gameNames.set(cat.game_id, name.trim());
+    }
+  }
+
+  // Build a map of expansion names -> {id, game_id} for matching (order items reference expansion by name)
+  const expByName = new Map();
+  for (const exp of expansions) {
+    expByName.set(exp.name.toLowerCase(), exp);
+  }
+
+  // Fetch all orders (paginated) and aggregate sales per expansion since fromDate
   let page = 1;
   let hasMore = true;
-  const soldSets = new Map(); // expansion_id -> { name, count }
-  const orders = [];
+  // expansion_id -> { name, game_id, qty, cents, perCard: Map(blueprint_id -> {name, qty, cents}) }
+  const soldSets = new Map();
   while (hasMore) {
     const res = await fetch(`${API_URL}/orders?sort=date.desc&page=${page}&limit=${PAGE_LIMIT}`,
       {
@@ -99,21 +135,38 @@ const CACHE_TTL_MS = CACHE_TTL_HOURS * 60 * 60 * 1000;
     }
     if (data.length === 0) break;
     for (const order of data) {
-      if (!order.date) continue;
-      const orderDate = new Date(order.date);
+      const items = order.order_items || order.items;
+      if (!Array.isArray(items) || items.length === 0) continue;
+      const orderDateStr = items[0].created_at;
+      if (!orderDateStr) continue;
+      const orderDate = new Date(orderDateStr);
       if (orderDate < fromDate) {
         hasMore = false;
         break;
       }
-      orders.push(order);
-      if (!Array.isArray(order.items)) continue;
-      for (const item of order.items) {
-        const expId = item.expansion_id || item.expansion?.id;
-        if (!expId) continue;
-        const exp = expansions.find(e => (e.id || e.expansion_id) === expId);
-        const expName = exp ? (exp.name || exp.title) : (item.expansion?.name || 'Unknown');
-        const prev = soldSets.get(expId) || { name: expName, count: 0 };
-        soldSets.set(expId, { name: expName, count: prev.count + (item.quantity ?? 1) });
+      for (const item of items) {
+        const expName = item.expansion || 'Unknown';
+        const exp = expByName.get(expName.toLowerCase());
+        if (!exp) continue;
+        const qty = item.quantity ?? 1;
+        const priceCents = (item.seller_price?.cents != null)
+          ? item.seller_price.cents
+          : (item.price_cents != null)
+            ? item.price_cents
+            : (typeof item.price === 'number' ? Math.round(item.price * 100) : 0);
+
+        const entry = soldSets.get(exp.id) || { name: exp.name, game_id: exp.game_id, qty: 0, cents: 0, perCard: new Map() };
+        entry.qty += qty;
+        entry.cents += priceCents * qty;
+
+        const blueprintId = item.blueprint_id || item.blueprint?.id;
+        const cardName = item.name || item.blueprint?.name || 'Unknown';
+        const prevCard = entry.perCard.get(blueprintId) || { name: cardName, qty: 0, cents: 0 };
+        prevCard.qty += qty;
+        prevCard.cents += priceCents * qty;
+        entry.perCard.set(blueprintId, prevCard);
+
+        soldSets.set(exp.id, entry);
       }
     }
     hasMore = hasMore && data.length === PAGE_LIMIT;
@@ -125,72 +178,117 @@ const CACHE_TTL_MS = CACHE_TTL_HOURS * 60 * 60 * 1000;
     process.exit(0);
   }
 
-  // Display sets and prompt user to select one
-  const setList = Array.from(soldSets.entries()).map(([id, info], idx) => ({
-    idx: idx + 1,
-    id,
-    name: info.name,
-    count: info.count
-  }));
-  console.log('Sets with sales since', dateStr);
-  setList.forEach(s => {
-    console.log(`${s.idx}. ${s.name} (sold: ${s.count})`);
+  // Group sold sets by game
+  const games = new Map(); // game_id -> { name, sets: [{id, name, qty, cents, perCard}] }
+  for (const [id, info] of soldSets.entries()) {
+    const gameName = gameNames.get(info.game_id) || 'Unknown Game';
+    const game = games.get(info.game_id) || { name: gameName, sets: [] };
+    game.sets.push({ id, name: info.name, qty: info.qty, cents: info.cents, perCard: info.perCard });
+    games.set(info.game_id, game);
+  }
+
+  const gameList = Array.from(games.values()).map((g, idx) => {
+    const qty = g.sets.reduce((sum, s) => sum + s.qty, 0);
+    const cents = g.sets.reduce((sum, s) => sum + s.cents, 0);
+    return { idx: idx + 1, ...g, qty, cents };
   });
 
+  console.log('Games with sales since', dateStr);
+  gameList.forEach(g => {
+    console.log(`${g.idx}. ${g.name} (sold: ${g.qty}, ${formatUSDFromCents(g.cents)})`);
+  });
+
+  // Queue-based line reader: rl.question() can drop a 'line' event for an
+  // empty string when multiple lines are already buffered (e.g. piped input).
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q) => new Promise(res => rl.question(q, res));
-  let chosenIdx = null;
+  const lineQueue = [];
+  const waiters = [];
+  rl.on('line', (line) => {
+    if (waiters.length > 0) waiters.shift()(line);
+    else lineQueue.push(line);
+  });
+  const ask = (q) => {
+    process.stdout.write(q);
+    return new Promise(resolve => {
+      if (lineQueue.length > 0) resolve(lineQueue.shift());
+      else waiters.push(resolve);
+    });
+  };
+
+  let chosenGame = null;
   while (true) {
-    const answer = await ask('Select a set by number: ');
+    const answer = await ask('Select a game by number: ');
+    const num = parseInt(answer, 10);
+    if (!isNaN(num) && num >= 1 && num <= gameList.length) {
+      chosenGame = gameList[num - 1];
+      break;
+    }
+    console.log('Invalid selection. Try again.');
+  }
+
+  // Display sets within the chosen game
+  const setList = chosenGame.sets.map((s, idx) => ({ idx: idx + 1, ...s }));
+  console.log(`\nSets sold for ${chosenGame.name} since ${dateStr}`);
+  setList.forEach(s => {
+    console.log(`${s.idx}. ${s.name} (sold: ${s.qty}, ${formatUSDFromCents(s.cents)})`);
+  });
+
+  let chosenSet = null;
+  while (true) {
+    const answer = await ask(`Select a set by number, or press Enter for the full ${chosenGame.name} total: `);
+    if (answer.trim() === '') break; // no selection -> full game total
     const num = parseInt(answer, 10);
     if (!isNaN(num) && num >= 1 && num <= setList.length) {
-      chosenIdx = num - 1;
+      chosenSet = setList[num - 1];
       break;
     }
     console.log('Invalid selection. Try again.');
   }
   rl.close();
-  const chosenSet = setList[chosenIdx];
-  const expansionId = chosenSet.id;
-  const setName = chosenSet.name;
 
-
-  // Now, sum up sales for the chosen set
-  let totalSoldCents = 0;
-  let totalSoldQty = 0;
+  // Aggregate results: either the chosen set, or the whole game
+  let label;
+  let totalSoldQty;
+  let totalSoldCents;
   const perCard = new Map(); // blueprint_id -> { name, qty, totalCents }
-  for (const order of orders) {
-    if (!Array.isArray(order.items)) continue;
-    for (const item of order.items) {
-      if ((item.expansion_id || item.expansion?.id) === expansionId) {
-        const qty = item.quantity ?? 1;
-        const priceCents = (item.price_cents != null)
-          ? item.price_cents
-          : (typeof item.price === 'number' ? Math.round(item.price * 100) : 0);
-        totalSoldCents += priceCents * qty;
-        totalSoldQty += qty;
-        const blueprintId = item.blueprint_id || item.blueprint?.id;
-        const name = item.name || item.blueprint?.name || 'Unknown';
-        const prev = perCard.get(blueprintId) || { name, qty: 0, totalCents: 0 };
-        perCard.set(blueprintId, {
-          name,
-          qty: prev.qty + qty,
-          totalCents: prev.totalCents + (priceCents * qty)
-        });
+  if (chosenSet) {
+    label = `set: ${chosenSet.name}`;
+    totalSoldQty = chosenSet.qty;
+    totalSoldCents = chosenSet.cents;
+    for (const [bpId, card] of chosenSet.perCard.entries()) {
+      perCard.set(bpId, { name: card.name, qty: card.qty, totalCents: card.cents });
+    }
+  } else {
+    label = `game: ${chosenGame.name}`;
+    totalSoldQty = chosenGame.qty;
+    totalSoldCents = chosenGame.cents;
+    for (const set of chosenGame.sets) {
+      for (const [bpId, card] of set.perCard.entries()) {
+        const prev = perCard.get(bpId) || { name: card.name, qty: 0, totalCents: 0 };
+        prev.qty += card.qty;
+        prev.totalCents += card.cents;
+        perCard.set(bpId, prev);
       }
     }
   }
 
   // Output summary
-  console.log(`Cards sold from set: ${setName} (expansion_id: ${expansionId})`);
-  console.log(`Total sold: ${totalSoldQty} cards, ${formatUSDFromCents(totalSoldCents)}`);
+  const summaryLine = `Total sold: ${totalSoldQty} cards, ${formatUSDFromCents(totalSoldCents)}`;
+  console.log(`\nCards sold for ${label}`);
+  console.log(summaryLine);
   if (perCard.size > 0) {
-    const rows = Array.from(perCard.values()).map(card => ({
+    const BREAKDOWN_LIMIT = 25;
+    const sorted = Array.from(perCard.values()).sort((a, b) => b.totalCents - a.totalCents);
+    const rows = sorted.slice(0, BREAKDOWN_LIMIT).map(card => ({
       name: card.name,
       quantity: card.qty,
       total_usd: formatUSDFromCents(card.totalCents)
     }));
-    console.log('Breakdown by card:');
+    console.log(`Breakdown by card (top ${rows.length} of ${sorted.length} by revenue):`);
     console.table(rows);
+    if (sorted.length > BREAKDOWN_LIMIT) {
+      console.log(`...and ${sorted.length - BREAKDOWN_LIMIT} more cards`);
+    }
   }
+  console.log(`\n${summaryLine}`);
 })();
