@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import type { Expansion, Blueprint, ListingRow, Condition } from './types';
 import { CONDITIONS, LANGUAGES } from './types';
 import { fetchExpansions, fetchBlueprints, bulkCreateProducts } from './api';
+import Scanner from './Scanner';
 
 // Icons as simple SVG components
 const TrashIcon = memo(() => (
@@ -9,6 +11,50 @@ const TrashIcon = memo(() => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
   </svg>
 ));
+
+// High-res, CORS-safe card image from Scryfall (the thumbnail in `image_url` is
+// too low-res to upscale into the hover popout without looking stretched).
+function scryfallImage(scryfallId: string, version: 'normal' | 'large' = 'normal') {
+  return `https://api.scryfall.com/cards/${scryfallId}?format=image&version=${version}`;
+}
+
+// Run async tasks with a small concurrency limit, preserving input order.
+// Firing every expansion's export at once looks bot-like and trips CardTrader's
+// Cloudflare protection; a pool of 2 keeps the request pattern tame.
+async function pooledMap<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+// Lets a focused quantity input be adjusted by mouse wheel without also
+// scrolling the row list — native wheel-to-change on <input type="number">
+// doesn't reliably stop the page/container from scrolling underneath it,
+// which made it impossible to spin past 1-2 before the cursor moved off
+// the input. A non-passive native listener lets us preventDefault reliably
+// (React's onWheel is passive and can't).
+function useQuantityWheel(onStep: (delta: number) => void) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (document.activeElement !== el) return;
+      e.preventDefault();
+      onStep(e.deltaY < 0 ? 1 : -1);
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, [onStep]);
+  return ref;
+}
 
 // Memoized row component - only re-renders when its specific props change
 interface CardRowProps {
@@ -24,7 +70,46 @@ const CardRow = memo(function CardRow({ row, rowIndex, onUpdate, onDelete }: Car
   // Prices are skipped (tabIndex -1) since they're set by defaults
   const qtyTabIndex = 1000 + (rowIndex * 2);
   const foilTabIndex = 1000 + (rowIndex * 2) + 1;
-  
+
+  // Hover popout: fetched on first hover (so opening a set doesn't pull a
+  // full-size image for every card) and rendered in a body-level portal with
+  // fixed positioning, so it can't be clipped by the list's overflow.
+  const thumbRef = useRef<HTMLDivElement>(null);
+  const [popoutLoaded, setPopoutLoaded] = useState(false);
+  const [popoutStyle, setPopoutStyle] = useState<React.CSSProperties | null>(null);
+  const popoutSrc = popoutLoaded
+    ? (row.blueprint.scryfall_id ? scryfallImage(row.blueprint.scryfall_id) : row.blueprint.image_url)
+    : undefined;
+
+  const showPopout = useCallback(() => {
+    setPopoutLoaded(true);
+    const el = thumbRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const POPOUT_W = 384; // 24rem
+    const estH = POPOUT_W / 0.717; // card aspect ~63:88
+    const gap = 8;
+    // Prefer the right of the thumbnail; flip left if it would overflow.
+    let left = r.right + gap;
+    if (left + POPOUT_W > window.innerWidth) left = Math.max(gap, r.left - POPOUT_W - gap);
+    // Align to the row, but clamp so the image stays fully on-screen.
+    let top = r.top;
+    const maxTop = window.innerHeight - estH - gap;
+    if (top > maxTop) top = Math.max(gap, maxTop);
+    setPopoutStyle({ position: 'fixed', left, top, zIndex: 50 });
+  }, []);
+
+  const hidePopout = useCallback(() => setPopoutStyle(null), []);
+
+  const qtyWheelRef = useQuantityWheel(useCallback(
+    (delta: number) => onUpdate(blueprintId, { quantity: Math.max(0, (row.quantity || 0) + delta) }),
+    [blueprintId, onUpdate, row.quantity]
+  ));
+  const foilWheelRef = useQuantityWheel(useCallback(
+    (delta: number) => onUpdate(blueprintId, { quantityFoil: Math.max(0, (row.quantityFoil || 0) + delta) }),
+    [blueprintId, onUpdate, row.quantityFoil]
+  ));
+
   return (
     <div 
       className="grid grid-cols-[32px_48px_1fr_100px_100px_100px_100px_100px] gap-3 px-6 py-3 items-center hover:bg-gray-50 text-base"
@@ -46,23 +131,40 @@ const CardRow = memo(function CardRow({ row, rowIndex, onUpdate, onDelete }: Car
       </button>
       <div className="flex items-center gap-3">
         {row.blueprint.image_url && (
-          <div className="card-thumb-container">
+          <div
+            ref={thumbRef}
+            className="card-thumb-container"
+            onMouseEnter={showPopout}
+            onMouseLeave={hidePopout}
+          >
             <div className="w-16 h-12 overflow-hidden rounded cursor-pointer">
-              <img 
-                src={row.blueprint.image_url} 
-                alt="" 
-                className="w-16 object-cover object-top" 
+              <img
+                src={row.blueprint.image_url}
+                alt=""
+                className="w-16 object-cover object-top"
               />
             </div>
-            {/* Hover preview - debuggable with Chrome DevTools :hov checkbox */}
-            <img 
-              src={row.blueprint.image_url} 
-              alt={row.blueprint.name}
-              className="card-popout" 
-            />
+            {/* Hover preview - full-res Scryfall art, fetched on first hover,
+                portaled to <body> with fixed position so the list's overflow
+                can't clip it near the bottom of a short list. */}
+            {popoutSrc && popoutStyle &&
+              createPortal(
+                <img
+                  src={popoutSrc}
+                  alt={row.blueprint.name}
+                  className="card-popout"
+                  style={popoutStyle}
+                />,
+                document.body
+              )}
           </div>
         )}
         <span className="font-medium truncate text-base">{row.blueprint.name}</span>
+        {(row.blueprint.fixed_properties?.collector_number ?? row.blueprint.version) && (
+          <span className="text-gray-400 text-sm whitespace-nowrap tabular-nums">
+            #{row.blueprint.fixed_properties?.collector_number ?? row.blueprint.version}
+          </span>
+        )}
       </div>
       <div>
         <select
@@ -88,6 +190,7 @@ const CardRow = memo(function CardRow({ row, rowIndex, onUpdate, onDelete }: Car
       </div>
       <div>
         <input
+          ref={qtyWheelRef}
           type="number"
           className="w-full border rounded px-2 py-1 text-center"
           tabIndex={qtyTabIndex}
@@ -98,6 +201,7 @@ const CardRow = memo(function CardRow({ row, rowIndex, onUpdate, onDelete }: Car
       </div>
       <div>
         <input
+          ref={foilWheelRef}
           type="number"
           className="w-full border rounded px-2 py-1 text-center bg-yellow-50"
           tabIndex={foilTabIndex}
@@ -122,8 +226,6 @@ const CardRow = memo(function CardRow({ row, rowIndex, onUpdate, onDelete }: Car
 });
 
 export default function BulkInterface() {
-  // Data state
-  // const [, setGames] = useState<Game[]>([]);
   const [expansions, setExpansions] = useState<Expansion[]>(() => {
     const cached = localStorage.getItem('expansionsCache');
     if (cached) {
@@ -175,6 +277,7 @@ export default function BulkInterface() {
 
   const [sortBy, setSortBy] = useState<'name' | 'number'>('name');
   const [submitting, setSubmitting] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   
   // Default values for new rows (persisted to localStorage)
   const [defaultCondition, setDefaultCondition] = useState<Condition>('Near Mint');
@@ -219,13 +322,6 @@ export default function BulkInterface() {
     localStorage.setItem('workingItems', JSON.stringify(workingItems));
   }, [workingItems]);
 
-  // // Load games on mount
-  // useEffect(() => {
-  //   fetchGames()
-  //     .then(setGames)
-  //     .catch(err => setError(err.message));
-  // }, []);
-
   // Load expansions on mount (use cache, refresh in background)
   useEffect(() => {
     fetchExpansions()
@@ -265,8 +361,8 @@ export default function BulkInterface() {
     setLoading(true);
     setError(null);
 
-    // Fetch blueprints for all selected expansions
-    Promise.all(selectedExpansionIds.map(id => fetchBlueprints(id)))
+    // Fetch blueprints for all selected expansions (throttled to avoid a burst)
+    pooledMap(selectedExpansionIds, 2, id => fetchBlueprints(id))
       .then(results => {
         // Merge all blueprints, sorted by name
         const merged = results.flat().sort((a, b) => a.name.localeCompare(b.name));
@@ -435,6 +531,56 @@ export default function BulkInterface() {
   // Delete a row from working items
   const deleteRow = useCallback((blueprintId: number) => {
     setWorkingItems(prev => prev.filter(row => row.blueprint.id !== blueprintId));
+  }, []);
+
+  // Stable cache key for the scanner's pHash index: the loaded expansion set.
+  const scanSetId = useMemo(
+    () => [...selectedExpansionIds].sort((a, b) => a - b).join('-'),
+    [selectedExpansionIds]
+  );
+
+  // A scanned card increments the matching row in-place (foil vs non-foil), or
+  // appends a new row seeded from the default-row state with a quantity of 1 —
+  // the same working state and Sell path as the manual add flow.
+  const handleScanMatch = useCallback((blueprintId: number, info: { isFoil: boolean }) => {
+    setWorkingItems(prev => {
+      const existing = prev.find(r => r.blueprint.id === blueprintId);
+      if (existing) {
+        return prev.map(r =>
+          r.blueprint.id === blueprintId
+            ? info.isFoil
+              ? { ...r, quantityFoil: r.quantityFoil + 1 }
+              : { ...r, quantity: r.quantity + 1 }
+            : r
+        );
+      }
+      const bp = blueprints.find(b => b.id === blueprintId);
+      if (!bp) return prev; // not part of the loaded set
+      const newRow: ListingRow = {
+        blueprint: bp,
+        selected: false,
+        condition: defaultCondition,
+        language: defaultLanguage,
+        quantity: info.isFoil ? 0 : 1,
+        quantityFoil: info.isFoil ? 1 : 0,
+        price: defaultPrice,
+      };
+      return [...prev, newRow];
+    });
+  }, [blueprints, defaultCondition, defaultLanguage, defaultPrice]);
+
+  // Undo a scanned count: decrement the matching row's foil/non-foil quantity
+  // (never below zero). The inverse of handleScanMatch, for stream misreads.
+  const handleScanUndo = useCallback((blueprintId: number, info: { isFoil: boolean }) => {
+    setWorkingItems(prev =>
+      prev.map(r =>
+        r.blueprint.id === blueprintId
+          ? info.isFoil
+            ? { ...r, quantityFoil: Math.max(0, r.quantityFoil - 1) }
+            : { ...r, quantity: Math.max(0, r.quantity - 1) }
+          : r
+      )
+    );
   }, []);
 
   // Delete all selected rows
@@ -650,6 +796,19 @@ export default function BulkInterface() {
               <span>+</span>
               Add{letterFilter ? ` "${letterFilter.toUpperCase()}"` : ''} ({filteredBlueprintsCount})
             </button>
+
+            {/* Scan toggle: opens the camera intake panel for the loaded set */}
+            <button
+              className={`px-5 py-2.5 rounded flex items-center gap-2 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
+                scannerOpen ? 'bg-yellow-400 text-gray-900' : 'bg-white/10 hover:bg-white/20 text-white'
+              }`}
+              onClick={() => setScannerOpen(o => !o)}
+              disabled={blueprints.length === 0}
+              title="Scan cards with a webcam"
+            >
+              <span>◉</span>
+              Scan
+            </button>
           </div>
         </div>
       </header>
@@ -801,6 +960,17 @@ export default function BulkInterface() {
           {submitting ? 'Submitting...' : 'Sell'}
         </button>
       </div>
+
+      {/* Camera intake panel — feeds scanned cards into the same working list */}
+      {scannerOpen && blueprints.length > 0 && (
+        <Scanner
+          blueprints={blueprints}
+          setId={scanSetId}
+          onMatch={handleScanMatch}
+          onUndo={handleScanUndo}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </div>
   );
 }

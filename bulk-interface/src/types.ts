@@ -27,6 +27,11 @@ export interface Blueprint {
   category_id: number;
   scryfall_id?: string;
   image_url?: string;
+  // CardTrader blueprint-level fixed properties (collector number, rarity, etc.)
+  fixed_properties?: {
+    collector_number?: string;
+    mtg_rarity?: string;
+  };
   // Card properties
   properties?: {
     mtg_foil?: boolean;

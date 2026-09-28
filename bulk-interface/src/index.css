@@ -30,19 +30,13 @@ body {
   position: relative;
 }
 
-.card-thumb-container .card-popout {
-  display: none;
-  position: absolute;
-  left: 5rem;
-  top: 0;
-  z-index: 50;
+/* Hover popout is portaled to <body> and positioned inline (position: fixed)
+   so the list's overflow can't clip it; this rule only styles its look. */
+.card-popout {
   width: 24rem;
   max-width: none;
   border-radius: 0.5rem;
   box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   border: 4px solid white;
-}
-
-.card-thumb-container:hover .card-popout {
-  display: block;
+  pointer-events: none;
 }
